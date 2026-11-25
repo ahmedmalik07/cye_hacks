@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { redirect } from "next/navigation";
 import { ArrowLeft, LogOut, Settings2 } from "lucide-react";
-import { getStaffSession, ADMIN_ROLES } from "@/lib/auth";
+import { requireStaffPage, ADMIN_ROLES } from "@/lib/auth";
 import { getFloor } from "@/lib/reservations/floor";
 import { bookForDay } from "@/lib/reservations/book";
 import HostWorkspace from "@/components/host/HostWorkspace";
@@ -21,8 +20,7 @@ export default async function FloorPage({
 }: {
   searchParams: Promise<{ date?: string }>;
 }) {
-  const session = await getStaffSession();
-  if (!session) redirect("/login");
+  const session = await requireStaffPage();
   const floor = await getFloor(session.restaurant.id);
   const asked = (await searchParams).date;
   const date = asked && /^\d{4}-\d{2}-\d{2}$/.test(asked) ? asked : floor.today;

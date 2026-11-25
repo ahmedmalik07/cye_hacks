@@ -1,4 +1,4 @@
-import { getStaffSession } from "@/lib/auth";
+import { requireStaffPage } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { POLICY_SELECT, parseWeekHours } from "@/lib/reservations/policy";
 import { zonedDateKey } from "@/lib/zonedTime";
@@ -9,7 +9,7 @@ import ReservationSettings from "@/components/admin/reservations/ReservationSett
 export const dynamic = "force-dynamic";
 
 export default async function ReservationSettingsPage() {
-  const session = (await getStaffSession())!;
+  const session = await requireStaffPage({ admin: true });
   const [restaurant, tables] = await Promise.all([
     prisma.restaurant.findUnique({
       where: { id: session.restaurant.id },

@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { CalendarDays, Lock, Users } from "lucide-react";
-import { getStaffSession } from "@/lib/auth";
+import { requireStaffPage } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { loadRestaurant } from "@/lib/reservations/service";
 import { dayClosedReason, hoursForDay } from "@/lib/reservations/policy";
@@ -16,7 +16,7 @@ export const dynamic = "force-dynamic";
  * night itself is run from the host screen.
  */
 export default async function ReservationsOverviewPage() {
-  const session = (await getStaffSession())!;
+  const session = await requireStaffPage({ admin: true });
   const restaurantId = session.restaurant.id;
   const { restaurant, policy } = await loadRestaurant(restaurantId);
   const tz = policy.timeZone;

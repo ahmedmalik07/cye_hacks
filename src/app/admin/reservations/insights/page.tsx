@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { getStaffSession } from "@/lib/auth";
+import { requireStaffPage } from "@/lib/auth";
 import { getInsights } from "@/lib/reservations/insights";
 import { formatMoney } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,7 @@ const BUCKET: Record<string, string> = {
 };
 
 export default async function InsightsPage({ searchParams }: Props) {
-  const session = (await getStaffSession())!;
+  const session = await requireStaffPage({ admin: true });
   const days = (await searchParams).days === "7" ? 7 : 30;
   const d = await getInsights(session.restaurant.id, days);
   const money = (c: number) => formatMoney(c, d.restaurant.currency);

@@ -387,3 +387,59 @@ test("staff sign in from the login page and reach the host screen", async ({ pag
   await page.goto("/admin/reservations/settings");
   await expect(page).toHaveURL(/\/floor$/);
 });
+
+test("security: no session means no data, cross-site writes are refused, CSP is set", async ({
+  page,
+  playwright,
+}) => {
+  const anon = await playwright.request.newContext({ baseURL: "http://127.0.0.1:3100" });
+  for (const path of ["/api/staff/floor", "/api/staff/guests", "/api/staff/reservations?date=2026-11-25"]) {
+    expect((await anon.get(path)).status(), path).toBe(401);
+  }
+  expect(
+    (await anon.post("/api/admin/tables", { data: { name: "X", seats: 2 } })).status(),
+  ).toBe(401);
+  // Cron and the camera feed refuse callers without their secret.
+  expect((await anon.post("/api/cron/tick")).status()).toBe(401);
+  expect(
+    (await anon.post("/api/edge/occupancy", { data: { readings: [] } })).status(),
+  ).toBe(404);
+
+  // A signed-in host: a write that claims to come from another site is refused.
+  const { tables } = await seedRestaurant(page);
+  const cross = await page.request.post(`/api/staff/floor/tables/${tables.T2}`, {
+    data: { action: "SEAT", partySize: 2 },
+    headers: { origin: "https://evil.example" },
+  });
+  expect(cross.status()).toBe(403);
+  const same = await page.request.post(`/api/staff/floor/tables/${tables.T2}`, {
+    data: { action: "SEAT", partySize: 2 },
+  });
+  expect(same.ok()).toBeTruthy();
+
+  // A host cannot reach owner endpoints.
+  const suffix = Date.now().toString(36);
+  const r = await db.restaurant.create({
+    data: { name: `Role QA ${suffix}`, slug: `role-qa-${suffix}`, timeZone: TZ },
+  });
+  const email = `role-${suffix}@qa.mezbaan.test`;
+  await db.staffUser.create({
+    data: {
+      restaurantId: r.id,
+      name: "Just a host",
+      email,
+      passwordHash: bcrypt.hashSync(PASSWORD, 10),
+      role: "HOST",
+    },
+  });
+  const hostCtx = await playwright.request.newContext({ baseURL: "http://127.0.0.1:3100" });
+  expect((await hostCtx.post("/api/auth/login", { data: { email, password: PASSWORD } })).ok()).toBeTruthy();
+  expect((await hostCtx.post("/api/admin/tables", { data: { name: "H1", seats: 2 } })).status()).toBe(403);
+  expect((await hostCtx.post("/api/admin/reservations/edge-key")).status()).toBe(403);
+
+  const res = await page.request.get("/login");
+  const csp = res.headers()["content-security-policy"] ?? "";
+  expect(csp).toContain("frame-ancestors 'none'");
+  expect(csp).toMatch(/script-src 'self' 'nonce-/);
+  expect(res.headers()["x-powered-by"]).toBeUndefined();
+});

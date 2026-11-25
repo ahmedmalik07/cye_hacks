@@ -16,6 +16,9 @@ export async function POST(req: Request) {
   }
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Enter your email and password." }, { status: 400 });
+  if (!(await rateLimit(`login-email:${parsed.data.email}`, 8, 15 * 60_000))) {
+    return NextResponse.json({ error: "Too many attempts. Wait a few minutes." }, { status: 429 });
+  }
   const staff = await prisma.staffUser.findUnique({ where: { email: parsed.data.email } });
   const ok = await bcrypt.compare(parsed.data.password, staff?.passwordHash ?? DUMMY_HASH);
   if (!staff || !staff.active || !ok) {
