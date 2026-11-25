@@ -1,0 +1,230 @@
+@import "tailwindcss";
+
+/*
+ * Mezbaan's colours: Navy, Sand and Tangerine. Every role is a 12-step scale:
+ *   1-2 backgrounds, 3-5 tinted fills, 6-8 borders, 9-10 solids,
+ *   11 readable coloured text, 12 strongest text.
+ * Screens use role classes only (bg-gray-3, text-brand-11, border-danger-6).
+ */
+:root {
+  color-scheme: light;
+
+  --gray-1: #fffcf4;
+  --gray-2: #fdf4e1;
+  --gray-3: #f9e9c8;
+  --gray-4: #f4dfb5;
+  --gray-5: #efd49f;
+  --gray-6: #e4c285;
+  --gray-7: #d3ab68;
+  --gray-8: #b88f4d;
+  --gray-9: #8f7247;
+  --gray-10: #7c6240;
+  --gray-11: #33467d;
+  --gray-12: #102257;
+
+  --brand-1: #f4f7ff;
+  --brand-2: #e9efff;
+  --brand-3: #dbe4fc;
+  --brand-4: #c9d6f8;
+  --brand-5: #b4c5f2;
+  --brand-6: #98aeea;
+  --brand-7: #7491dc;
+  --brand-8: #4f6fc6;
+  --brand-9: #13296e;
+  --brand-10: #1c3a92;
+  --brand-11: #b35300;
+  --brand-12: #102257;
+
+  --tangerine-1: #fffaf2;
+  --tangerine-2: #fff1de;
+  --tangerine-3: #ffe2bd;
+  --tangerine-4: #ffd29a;
+  --tangerine-5: #ffbe6f;
+  --tangerine-6: #ffa84a;
+  --tangerine-7: #ff9a2e;
+  --tangerine-8: #ff8a00;
+  --tangerine-9: #ff8a00;
+  --tangerine-10: #f07800;
+  --tangerine-11: #b35300;
+  --tangerine-12: #5a2a00;
+  --on-tangerine: #102257;
+  --sand: #efd49f;
+
+  --success-1: #fbfefd;
+  --success-2: #f4fbf7;
+  --success-3: #e6f7ed;
+  --success-4: #d6f1e3;
+  --success-5: #c3e9d7;
+  --success-6: #acdec8;
+  --success-7: #8bceb6;
+  --success-8: #56ba9f;
+  --success-9: #1b7a60;
+  --success-10: #156650;
+  --success-11: #208368;
+  --success-12: #1d3b31;
+
+  --warning-1: #fefdfb;
+  --warning-2: #fefbe9;
+  --warning-3: #fff7c2;
+  --warning-4: #ffee9c;
+  --warning-5: #fbe577;
+  --warning-6: #f3d673;
+  --warning-7: #e9c162;
+  --warning-8: #e2a336;
+  --warning-9: #ffc53d;
+  --warning-10: #ffba18;
+  --warning-11: #ab6400;
+  --warning-12: #4f3422;
+
+  --danger-1: #fffdfe;
+  --danger-2: #fff7f8;
+  --danger-3: #feeaed;
+  --danger-4: #ffdce1;
+  --danger-5: #ffced6;
+  --danger-6: #f8bfc8;
+  --danger-7: #efacb8;
+  --danger-8: #e592a3;
+  --danger-9: #ca244d;
+  --danger-10: #b0213f;
+  --danger-11: #ca244d;
+  --danger-12: #64172b;
+
+  --info-1: #fbfdff;
+  --info-2: #f4faff;
+  --info-3: #e6f4fe;
+  --info-4: #d5efff;
+  --info-5: #c2e5ff;
+  --info-6: #acd8fc;
+  --info-7: #8ec8f6;
+  --info-8: #5eb1ef;
+  --info-9: #0b68b8;
+  --info-10: #095aa0;
+  --info-11: #0d74ce;
+  --info-12: #113264;
+
+  --background: #f7e3b8;
+  --panel: #fffaf0;
+  --field: #ffffff;
+
+  --font-sans:
+    ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-mono: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-panel: var(--panel);
+  --color-field: var(--field);
+  --color-sand: var(--sand);
+  --color-on-tangerine: var(--on-tangerine);
+  --color-gray-1: var(--gray-1);
+  --color-gray-2: var(--gray-2);
+  --color-gray-3: var(--gray-3);
+  --color-gray-4: var(--gray-4);
+  --color-gray-5: var(--gray-5);
+  --color-gray-6: var(--gray-6);
+  --color-gray-7: var(--gray-7);
+  --color-gray-8: var(--gray-8);
+  --color-gray-9: var(--gray-9);
+  --color-gray-10: var(--gray-10);
+  --color-gray-11: var(--gray-11);
+  --color-gray-12: var(--gray-12);
+  --color-brand-1: var(--brand-1);
+  --color-brand-2: var(--brand-2);
+  --color-brand-3: var(--brand-3);
+  --color-brand-4: var(--brand-4);
+  --color-brand-5: var(--brand-5);
+  --color-brand-6: var(--brand-6);
+  --color-brand-7: var(--brand-7);
+  --color-brand-8: var(--brand-8);
+  --color-brand-9: var(--brand-9);
+  --color-brand-10: var(--brand-10);
+  --color-brand-11: var(--brand-11);
+  --color-brand-12: var(--brand-12);
+  --color-tangerine-1: var(--tangerine-1);
+  --color-tangerine-2: var(--tangerine-2);
+  --color-tangerine-3: var(--tangerine-3);
+  --color-tangerine-4: var(--tangerine-4);
+  --color-tangerine-5: var(--tangerine-5);
+  --color-tangerine-6: var(--tangerine-6);
+  --color-tangerine-7: var(--tangerine-7);
+  --color-tangerine-8: var(--tangerine-8);
+  --color-tangerine-9: var(--tangerine-9);
+  --color-tangerine-10: var(--tangerine-10);
+  --color-tangerine-11: var(--tangerine-11);
+  --color-tangerine-12: var(--tangerine-12);
+  --color-success-1: var(--success-1);
+  --color-success-2: var(--success-2);
+  --color-success-3: var(--success-3);
+  --color-success-4: var(--success-4);
+  --color-success-5: var(--success-5);
+  --color-success-6: var(--success-6);
+  --color-success-7: var(--success-7);
+  --color-success-8: var(--success-8);
+  --color-success-9: var(--success-9);
+  --color-success-10: var(--success-10);
+  --color-success-11: var(--success-11);
+  --color-success-12: var(--success-12);
+  --color-warning-1: var(--warning-1);
+  --color-warning-2: var(--warning-2);
+  --color-warning-3: var(--warning-3);
+  --color-warning-4: var(--warning-4);
+  --color-warning-5: var(--warning-5);
+  --color-warning-6: var(--warning-6);
+  --color-warning-7: var(--warning-7);
+  --color-warning-8: var(--warning-8);
+  --color-warning-9: var(--warning-9);
+  --color-warning-10: var(--warning-10);
+  --color-warning-11: var(--warning-11);
+  --color-warning-12: var(--warning-12);
+  --color-danger-1: var(--danger-1);
+  --color-danger-2: var(--danger-2);
+  --color-danger-3: var(--danger-3);
+  --color-danger-4: var(--danger-4);
+  --color-danger-5: var(--danger-5);
+  --color-danger-6: var(--danger-6);
+  --color-danger-7: var(--danger-7);
+  --color-danger-8: var(--danger-8);
+  --color-danger-9: var(--danger-9);
+  --color-danger-10: var(--danger-10);
+  --color-danger-11: var(--danger-11);
+  --color-danger-12: var(--danger-12);
+  --color-info-1: var(--info-1);
+  --color-info-2: var(--info-2);
+  --color-info-3: var(--info-3);
+  --color-info-4: var(--info-4);
+  --color-info-5: var(--info-5);
+  --color-info-6: var(--info-6);
+  --color-info-7: var(--info-7);
+  --color-info-8: var(--info-8);
+  --color-info-9: var(--info-9);
+  --color-info-10: var(--info-10);
+  --color-info-11: var(--info-11);
+  --color-info-12: var(--info-12);
+}
+
+html,
+body {
+  background: var(--background);
+  color: var(--gray-12);
+  font-family: var(--font-sans);
+}
+
+::selection {
+  background: var(--tangerine-5);
+  color: var(--gray-12);
+}
+
+:focus-visible {
+  outline: 2px solid var(--tangerine-8);
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

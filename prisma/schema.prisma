@@ -1,0 +1,441 @@
+// Mezbaan: the smart host stand. See docs/RESERVATIONS.md for how the pieces fit.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum StaffRole {
+  OWNER
+  MANAGER
+  HOST
+}
+
+model Restaurant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  currency  String   @default("PKR")
+  timeZone  String   @default("Asia/Karachi")
+  logoUrl   String?
+  address   String?
+  phone     String?
+  createdAt DateTime @default(now())
+
+  // ---- Booking rules ----
+  reservationsEnabled     Boolean @default(true)
+  // First and last seating a guest can book online, local "HH:MM". A close
+  // earlier than the open means the day runs past midnight.
+  bookingOpensAt          String  @default("12:00")
+  bookingClosesAt         String  @default("23:00")
+  bookingSlotMins         Int     @default(30)
+  bookingLeadMins         Int     @default(60)
+  bookingMaxDaysAhead     Int     @default(30)
+  bookingMaxParty         Int     @default(20)
+  // Share of reservable tables online bookings may hold at once; the rest
+  // stay free for walk-ins and phone regulars.
+  onlineTablesPct         Int     @default(80)
+  // Planning duration until the restaurant has its own history to learn from.
+  defaultDiningMins       Int     @default(90)
+  cleaningMins            Int     @default(10)
+  graceMins               Int     @default(15)
+  autoReleaseNoShows      Boolean @default(true)
+  reminderMinsBefore      Int     @default(120)
+  // A booked table shows as Reserved on the floor this long before arrival.
+  holdMinsBefore          Int     @default(30)
+  waitlistEnabled         Boolean @default(true)
+  waitlistAutoNotify      Boolean @default(true)
+  waitlistReplyMins       Int     @default(10)
+  // CCTV occupancy may close a paid table by itself only when this is on;
+  // otherwise it only suggests it to staff.
+  cctvAutoVacate          Boolean @default(false)
+  // sha256 of the on-site edge box's key. The key itself is shown once.
+  edgeKeyHash             String?
+  // Per-weekday first/last seating over the defaults above:
+  // [{ "day": 0-6 (Sun=0), "opensAt": "HH:MM", "closesAt": "HH:MM" } | { "day", "closed": true }]
+  bookingWeekHours        Json?
+  // Most guests that may start in one online slot (kitchen pacing). 0 = no limit.
+  bookingMaxCoversPerSlot Int     @default(0)
+  // The room around the tables, for the host screen drawing.
+  floorFixtures           Json?
+
+  staff             StaffUser[]
+  tables            Table[]
+  reservations      Reservation[]
+  tableSessions     TableSession[]
+  reservationTables ReservationTable[]
+  waitlistEntries   WaitlistEntry[]
+  guestMessages     GuestMessage[]
+  guests            Guest[]
+  bookingClosures   BookingClosure[]
+  auditLogs         AuditLog[]
+}
+
+model StaffUser {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         StaffRole  @default(HOST)
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  @@index([restaurantId])
+}
+
+model Table {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+
+  seats      Int     @default(4)
+  // Smallest party this table should take, so a family table isn't given to two.
+  minParty   Int     @default(1)
+  area       String  @default("Main hall")
+  // Tables sharing a group can be pushed together for one large party.
+  joinGroup  String?
+  // Off = walk-ins only, never offered online.
+  reservable Boolean @default(true)
+  sortOrder  Int     @default(0)
+
+  // ---- CCTV occupancy from an optional on-site edge box: counts, never images ----
+  cctvOccupied   Boolean?
+  cctvPeople     Int?
+  cctvConfidence Float?
+  cctvSince      DateTime?
+  cctvSeenAt     DateTime?
+
+  // ---- Floor plan, in plan units ----
+  planX Int?
+  planY Int?
+  planW Int?
+  planH Int?
+  // ROUND, SQUARE or RECT
+  shape String @default("SQUARE")
+
+  reservations      Reservation[]
+  sessions          TableSession[]
+  reservationTables ReservationTable[]
+
+  @@index([restaurantId])
+}
+
+enum ReservationStatus {
+  CONFIRMED
+  SEATED
+  CANCELLED
+  NO_SHOW
+  COMPLETED
+}
+
+enum ReservationSource {
+  ONLINE
+  PHONE
+  WALK_IN
+  WAITLIST
+}
+
+enum CancelledBy {
+  GUEST
+  STAFF
+  SYSTEM
+}
+
+model Reservation {
+  id             String            @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant        @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  // The first allocated table, kept for display. The full allocation is in `tables`.
+  tableId        String?
+  table          Table?            @relation(fields: [tableId], references: [id], onDelete: SetNull)
+  customerName   String
+  // Normalised (+92...). Cleared by the retention sweep once the booking is old.
+  customerPhone  String?
+  partySize      Int
+  childCount     Int               @default(0)
+  startAt        DateTime
+  endAt          DateTime
+  durationMins   Int               @default(90)
+  status         ReservationStatus @default(CONFIRMED)
+  source         ReservationSource @default(ONLINE)
+  note           String?
+  areaPreference String?
+
+  // Short reference the guest reads out, and the unguessable token in their
+  // manage link. No account: the link is the key.
+  code        String? @unique
+  manageToken String? @unique
+
+  guestConfirmedAt DateTime?
+  lateUntil        DateTime?
+  seatedAt         DateTime?
+  cancelledAt      DateTime?
+  cancelledBy      CancelledBy?
+  // Set when the grace period ran out and the table went back on sale.
+  releasedAt       DateTime?
+  createdById      String?
+
+  guestId   String?
+  guest     Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  tags      String[] @default([])
+  // Staff only, never shown to the guest. `note` is what the guest wrote.
+  staffNote String?
+  // Checked in at the door, waiting for their table to be ready.
+  arrivedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tables   ReservationTable[]
+  sessions TableSession[]
+  messages GuestMessage[]
+
+  @@index([guestId, startAt])
+  @@index([restaurantId, startAt])
+  @@index([restaurantId, status, startAt])
+  @@index([restaurantId, updatedAt])
+  @@index([tableId])
+}
+
+// One table held by one booking for a block of time. Postgres refuses two
+// active, overlapping blocks on the same table (see the migration).
+model ReservationTable {
+  reservationId String
+  reservation   Reservation @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  tableId       String
+  table         Table       @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  restaurant    Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  blockStart    DateTime
+  blockEnd      DateTime
+  active        Boolean     @default(true)
+
+  @@id([reservationId, tableId])
+  @@index([tableId, blockStart])
+  @@index([restaurantId, blockStart])
+}
+
+enum TableSessionSource {
+  WALK_IN
+  RESERVATION
+  WAITLIST
+}
+
+// One party at one table, from seated to cleaned. Staff move it along by hand
+// (ordered, bill, left, cleaned); the timings teach the turn-time estimates.
+model TableSession {
+  id              String             @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tableId         String
+  table           Table              @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  source          TableSessionSource @default(WALK_IN)
+  partySize       Int?
+  reservationId   String?
+  reservation     Reservation?       @relation(fields: [reservationId], references: [id], onDelete: SetNull)
+  waitlistEntryId String?
+  waitlistEntry   WaitlistEntry?     @relation(fields: [waitlistEntryId], references: [id], onDelete: SetNull)
+
+  seatedAt        DateTime  @default(now())
+  firstOrderAt    DateTime?
+  billRequestedAt DateTime?
+  paidAt          DateTime?
+  leftAt          DateTime?
+  cleanedAt       DateTime?
+  // STAFF or CCTV: who said the guests had gone.
+  leftVia         String?
+  freeAtOverride  DateTime?
+  // The bill total staff entered at close, for insights.
+  revenueCents    Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([restaurantId, seatedAt])
+  @@index([restaurantId, updatedAt])
+  @@index([tableId, seatedAt])
+  @@index([reservationId])
+  @@index([waitlistEntryId])
+}
+
+enum WaitlistStatus {
+  WAITING
+  NOTIFIED
+  SEATED
+  CANCELLED
+  EXPIRED
+}
+
+model WaitlistEntry {
+  id              String         @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  code            String         @unique
+  manageToken     String         @unique
+  customerName    String
+  customerPhone   String?
+  partySize       Int
+  status          WaitlistStatus @default(WAITING)
+  // REMOTE (joined from their phone) or DOOR (added by the host).
+  source          String         @default("REMOTE")
+  quotedMins      Int?
+  note            String?
+  notifiedAt      DateTime?
+  respondBy       DateTime?
+  offeredTableIds String[]       @default([])
+  guestId         String?
+  guest           Guest?         @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  seatedAt        DateTime?
+  cancelledAt     DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  sessions TableSession[]
+  messages GuestMessage[]
+
+  @@index([restaurantId, status, createdAt])
+  @@index([restaurantId, updatedAt])
+}
+
+enum GuestMessageKind {
+  BOOKING_CONFIRMED
+  REMINDER
+  LATE_ACCEPTED
+  LATE_DECLINED
+  CANCELLED
+  RELEASED
+  WAITLIST_JOINED
+  TABLE_READY
+  WAITLIST_EXPIRED
+}
+
+enum GuestMessageStatus {
+  QUEUED
+  SENT
+  // No WhatsApp API configured: staff send it with one tap from their phone.
+  MANUAL
+  FAILED
+  SKIPPED
+}
+
+model GuestMessage {
+  id              String             @id @default(cuid())
+  restaurantId    String
+  restaurant      Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  reservationId   String?
+  reservation     Reservation?       @relation(fields: [reservationId], references: [id], onDelete: Cascade)
+  waitlistEntryId String?
+  waitlistEntry   WaitlistEntry?     @relation(fields: [waitlistEntryId], references: [id], onDelete: Cascade)
+  kind            GuestMessageKind
+  toPhone         String
+  body            String
+  status          GuestMessageStatus @default(QUEUED)
+  error           String?
+  sentAt          DateTime?
+  createdAt       DateTime           @default(now())
+
+  @@index([restaurantId, status, createdAt])
+  @@index([reservationId])
+  @@index([waitlistEntryId])
+}
+
+model Guest {
+  id             String     @id @default(cuid())
+  restaurantId   String
+  restaurant     Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name           String
+  phone          String?
+  email          String?
+  vip            Boolean    @default(false)
+  tags           String[]   @default([])
+  allergies      String?
+  notes          String?
+  // "MM-DD", so the year stays private.
+  birthday       String?
+  marketingOptIn Boolean    @default(false)
+  lastSeenAt     DateTime   @default(now())
+  createdAt      DateTime   @default(now())
+  updatedAt      DateTime   @updatedAt
+
+  reservations Reservation[]
+  waitlist     WaitlistEntry[]
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId, lastSeenAt])
+  @@index([restaurantId, name])
+}
+
+model BookingClosure {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  // Local date, YYYY-MM-DD.
+  date         String
+  reason       String?
+  // True: staff may still book (private event). False: closed.
+  onlineOnly   Boolean    @default(false)
+  createdAt    DateTime   @default(now())
+
+  @@unique([restaurantId, date])
+}
+
+model AuditLog {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  actorId      String?
+  actorName    String?
+  action       String
+  detail       String?
+  createdAt    DateTime   @default(now())
+
+  @@index([restaurantId, createdAt])
+}
+
+enum JobStatus {
+  PENDING
+  RUNNING
+  DONE
+  FAILED
+}
+
+// A tiny Postgres job queue: reminders, no-show sweeps and guest messages.
+model Job {
+  id        String    @id @default(cuid())
+  name      String
+  payload   Json
+  runAt     DateTime  @default(now())
+  status    JobStatus @default(PENDING)
+  attempts  Int       @default(0)
+  dedupeKey String?   @unique
+  lastError String?
+  lockedAt  DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([status, runAt])
+}
+
+// Bumped on every floor change; screens watch it to refresh.
+model FloorRevision {
+  restaurantId String   @id
+  rev          Int      @default(0)
+  updatedAt    DateTime @updatedAt
+}
+
+model RateLimitHit {
+  key       String
+  windowEnd DateTime
+  count     Int      @default(1)
+
+  @@id([key, windowEnd])
+}
