@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { z } from "zod";
 import { prisma } from "@/lib/db";
 import { bumpRevision } from "@/lib/bus";
-import { rateLimit } from "@/lib/security";
+import { rateLimit, clientIp } from "@/lib/security";
 
 /**
  * Table occupancy from the restaurant's on-site edge box (CCTV + a person
@@ -37,7 +37,8 @@ export async function POST(req: Request) {
   const auth = req.headers.get("authorization") ?? "";
   const key = auth.startsWith("Bearer ") ? auth.slice(7) : "";
   if (!restaurantId || !key) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  if (!(await rateLimit(`edge:${restaurantId}`, 120, 60_000))) {
+  // Per address first, so strangers guessing keys can't use up a restaurant's quota.
+  if (!(await rateLimit(`edge-ip:${clientIp(req)}`, 240, 60_000))) {
     return NextResponse.json({ error: "Too many readings" }, { status: 429 });
   }
   const restaurant = await prisma.restaurant.findUnique({
@@ -50,6 +51,9 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
+  if (!(await rateLimit(`edge:${restaurantId}`, 120, 60_000))) {
+    return NextResponse.json({ error: "Too many readings" }, { status: 429 });
+  }
   const parsed = schema.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "Bad readings" }, { status: 400 });
 

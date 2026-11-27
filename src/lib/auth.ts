@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import type { StaffRole } from "@prisma/client";
 import { prisma } from "./db";
 
@@ -71,4 +72,15 @@ export async function getStaffSession() {
   const { restaurant, passwordHash: _hash, ...user } = staff;
   void _hash;
   return { user, restaurant };
+}
+
+/**
+ * For server components. Layouts do not re-run on every client navigation,
+ * so each protected page checks for itself instead of trusting its layout.
+ */
+export async function requireStaffPage(opts: { admin?: boolean } = {}) {
+  const session = await getStaffSession();
+  if (!session) redirect("/login");
+  if (opts.admin && !ADMIN_ROLES.includes(session.user.role)) redirect("/floor");
+  return session;
 }

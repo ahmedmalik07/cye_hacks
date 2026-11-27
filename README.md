@@ -10,7 +10,7 @@ tables back on sale by itself.
 All code in this repository was written during the Innovation Sprint build
 window (17 to 28 November 2026).
 
-- **Live demo:** _add the deployment link here_
+- **Live site:** https://dishly.wyibe.com
 - **Demo video (2 min):** _add the video link here_
 - **Slides:** _add the deck link here_
 

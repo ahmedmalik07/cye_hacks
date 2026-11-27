@@ -1,4 +1,4 @@
-import { getStaffSession } from "@/lib/auth";
+import { requireStaffPage } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { parseFixtures } from "@/lib/reservations/layout";
 import FloorPlanEditor from "@/components/admin/reservations/FloorPlanEditor";
@@ -6,7 +6,7 @@ import FloorPlanEditor from "@/components/admin/reservations/FloorPlanEditor";
 export const dynamic = "force-dynamic";
 
 export default async function FloorPlanPage() {
-  const session = (await getStaffSession())!;
+  const session = await requireStaffPage({ admin: true });
   const tables = await prisma.table.findMany({
     where: { restaurantId: session.restaurant.id, active: true },
     select: {
