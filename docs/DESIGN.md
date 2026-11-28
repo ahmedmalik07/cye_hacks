@@ -99,10 +99,10 @@ table dialog offers only the next sensible step:
 | Signal | Source |
 |---|---|
 | Seated | Host taps Seat, drags a party onto a table, or seats a walk-in |
-| Ordered | Staff tap "Order placed" (bill or paid imply it) |
-| Eating | Taken as 20 min after ordering |
-| Bill requested | Staff tap "Bill requested" |
-| Paid | Staff tap "Paid", optionally with the bill total for Insights |
+| Ordered | The guest's first QR order; or staff tap "Order placed" |
+| Eating | All the table's orders marked served on the orders board; with none, 20 min after ordering |
+| Bill requested | The guest's "Ask for the bill" button on the table QR page; or staff tap "Bill requested" |
+| Paid | Staff tap "Paid"; the total is what was ordered unless staff type one |
 | Left | Staff tap "Guests left"; or CCTV (only if the owner allows, §5) |
 | Cleaned | Staff tap "Cleaning done": the only route back to bookable |
 
@@ -204,6 +204,11 @@ the reply window; the table goes to the next party).
   Postgres, claimed with `FOR UPDATE SKIP LOCKED`. `/api/cron/tick` runs them
   and re-sweeps every restaurant with something due; a long-lived server
   also ticks in-process every 30 s (`src/instrumentation.ts`).
+- **QR ordering** (`src/lib/ordering.ts`, `/t/{code}`): each table has an
+  unguessable code. The server prices every order from the menu (the phone
+  only sends dish ids and quantities), opens the table's session if nobody
+  seated it, and bumps the live revision. Orders keep the name and price they
+  were placed at.
 - **Switching online booking off** keeps existing bookings visible and
   cancellable but takes no new ones.
 - **CCTV** (optional): an on-site edge box runs person detection locally and

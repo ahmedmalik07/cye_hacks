@@ -115,6 +115,36 @@ async function main() {
   await prisma.waitlistEntry.deleteMany({ where: { restaurantId: r.id } });
   await prisma.guest.deleteMany({ where: { restaurantId: r.id } });
   await prisma.job.deleteMany({});
+  await prisma.order.deleteMany({ where: { restaurantId: r.id } });
+  await prisma.serviceRequest.deleteMany({ where: { restaurantId: r.id } });
+  await prisma.menuItem.deleteMany({ where: { restaurantId: r.id } });
+  const MENU: [string, string, number, string?][] = [
+    ["Starters", "Chicken Malai Boti", 1100, "Creamy, charcoal grilled"],
+    ["Starters", "Seekh Kebab", 950],
+    ["Starters", "Dahi Bhallay", 550],
+    ["Mains", "Mutton Karahi (half)", 2800, "Tomato, ginger, green chilli"],
+    ["Mains", "Chicken Handi", 1900],
+    ["Mains", "Daal Makhani", 1100],
+    ["Mains", "Beef Nihari", 1750, "Slow cooked overnight"],
+    ["Rice and bread", "Chicken Biryani", 1100],
+    ["Rice and bread", "Garlic Naan", 120],
+    ["Rice and bread", "Roghni Naan", 110],
+    ["Sweets", "Kheer", 450],
+    ["Sweets", "Gulab Jamun (2)", 350],
+    ["Drinks", "Mint Margarita", 400],
+    ["Drinks", "Doodh Patti Chai", 250],
+    ["Drinks", "Lassi", 350],
+  ];
+  await prisma.menuItem.createMany({
+    data: MENU.map(([category, name, price, description], i) => ({
+      restaurantId: r.id,
+      category,
+      name,
+      description: description ?? null,
+      priceCents: price * 100,
+      sortOrder: i,
+    })),
+  });
 
   const existing = await prisma.table.findMany({
     where: { restaurantId: r.id },
@@ -508,6 +538,7 @@ async function main() {
   console.log(`Seeded ${tables.length} tables, ${history.length} past meals, tonight's floor.`);
   console.log(`Guest booking:  /r/${r.slug}/reserve`);
   console.log(`Waiting list:   /r/${r.slug}/waitlist`);
+  console.log("Table QR codes: /admin/reservations/qr   Orders board: /orders");
   console.log(`Host screen:    /floor   (owner@mezbaan.demo or host@mezbaan.demo / ${DEMO_PASSWORD})`);
 }
 

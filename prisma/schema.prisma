@@ -73,6 +73,9 @@ model Restaurant {
   guests            Guest[]
   bookingClosures   BookingClosure[]
   auditLogs         AuditLog[]
+  menuItems         MenuItem[]
+  orders            Order[]
+  serviceRequests   ServiceRequest[]
 }
 
 model StaffUser {
@@ -94,6 +97,8 @@ model Table {
   restaurantId String
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   name         String
+  // Unguessable code printed in the table's QR link (/t/{code}).
+  code         String     @unique @default(cuid())
   active       Boolean    @default(true)
   createdAt    DateTime   @default(now())
 
@@ -125,6 +130,8 @@ model Table {
   reservations      Reservation[]
   sessions          TableSession[]
   reservationTables ReservationTable[]
+  orders            Order[]
+  serviceRequests   ServiceRequest[]
 
   @@index([restaurantId])
 }
@@ -185,8 +192,8 @@ model Reservation {
   createdById      String?
 
   guestId   String?
-  guest     Guest?   @relation(fields: [guestId], references: [id], onDelete: SetNull)
-  tags      String[] @default([])
+  guest     Guest?    @relation(fields: [guestId], references: [id], onDelete: SetNull)
+  tags      String[]  @default([])
   // Staff only, never shown to the guest. `note` is what the guest wrote.
   staffNote String?
   // Checked in at the door, waiting for their table to be ready.
@@ -228,6 +235,8 @@ enum TableSessionSource {
   WALK_IN
   RESERVATION
   WAITLIST
+  // A guest ordered from the table's QR before anyone seated them.
+  QR
 }
 
 // One party at one table, from seated to cleaned. Staff move it along by hand
@@ -259,6 +268,8 @@ model TableSession {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  orders Order[]
 
   @@index([restaurantId, seatedAt])
   @@index([restaurantId, updatedAt])
@@ -438,4 +449,86 @@ model RateLimitHit {
   count     Int      @default(1)
 
   @@id([key, windowEnd])
+}
+
+// ---- QR ordering: guests order from their phone at the table ----
+
+model MenuItem {
+  id           String     @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  // Whole cents of the restaurant's currency.
+  priceCents   Int
+  category     String     @default("Mains")
+  available    Boolean    @default(true)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+
+  orderItems OrderItem[]
+
+  @@index([restaurantId, category, sortOrder])
+}
+
+enum OrderStatus {
+  NEW
+  PREPARING
+  SERVED
+  CANCELLED
+}
+
+model Order {
+  id           String        @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant    @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tableId      String
+  table        Table         @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  sessionId    String?
+  session      TableSession? @relation(fields: [sessionId], references: [id], onDelete: SetNull)
+  status       OrderStatus   @default(NEW)
+  totalCents   Int
+  note         String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  items OrderItem[]
+
+  @@index([restaurantId, status, createdAt])
+  @@index([sessionId])
+  @@index([tableId, createdAt])
+}
+
+model OrderItem {
+  id         String    @id @default(cuid())
+  orderId    String
+  order      Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  menuItemId String?
+  menuItem   MenuItem? @relation(fields: [menuItemId], references: [id], onDelete: SetNull)
+  // Name and price as ordered, so later menu edits don't rewrite history.
+  name       String
+  priceCents Int
+  qty        Int
+
+  @@index([orderId])
+}
+
+enum ServiceRequestType {
+  BILL
+  WAITER
+}
+
+model ServiceRequest {
+  id           String             @id @default(cuid())
+  restaurantId String
+  restaurant   Restaurant         @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  tableId      String
+  table        Table              @relation(fields: [tableId], references: [id], onDelete: Cascade)
+  type         ServiceRequestType
+  open         Boolean            @default(true)
+  createdAt    DateTime           @default(now())
+  resolvedAt   DateTime?
+
+  @@index([restaurantId, open, createdAt])
+  @@index([tableId, open])
 }

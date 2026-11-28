@@ -27,8 +27,9 @@ are turned away. Generic booking widgets know bookings, not the floor.
 | For | What |
 |---|---|
 | The host at the door | One screen (`/floor`): the room drawn from above with every table's state, the night's bookings, the waiting list. Pick a guest, tap a table, seated. Walk-in in two taps. |
-| Guests | Book online with a WhatsApp number, no account or app (`/r/{slug}/reserve`). Join the waiting list from a QR at the door and wait in the car (`/r/{slug}/waitlist`). A private link to confirm, run late or cancel. |
-| The owner | Tables, floor plan, hours and closures, pacing, the guest book (VIPs, allergies, visits, no-shows), and Insights: covers, turn times, no-shows, revenue recovered from released tables. |
+| Guests | Book online with a WhatsApp number, no account or app (`/r/{slug}/reserve`). Join the waiting list from a QR at the door and wait in the car (`/r/{slug}/waitlist`). A private link to confirm, run late or cancel. At the table, scan its QR to order, ask for the bill or call a waiter (`/t/{code}`). |
+| The kitchen and floor staff | An orders board (`/orders`): new orders, preparing, served, and tables asking for the bill or a waiter. |
+| The owner | Tables, menu, printable table QR codes, floor plan, hours and closures, pacing, the guest book (VIPs, allergies, visits, no-shows), and Insights: covers, turn times, no-shows, revenue recovered from released tables. |
 
 What makes it more than a booking form:
 
@@ -49,8 +50,16 @@ What makes it more than a booking form:
 5. **WhatsApp-first.** Confirmations, reminders and "your table is ready" go
    through the WhatsApp Cloud API when configured, or wait as one-tap
    `wa.me` messages the host sends from their own phone (free, works on day one).
-6. **Optional CCTV occupancy.** An on-site box can post table occupancy counts
-   (never images) to sharpen estimates. Off unless the owner turns it on.
+6. **QR ordering that drives the floor.** A guest's first order marks the table
+   occupied and "ordered"; asking for the bill turns the tile to Bill; the
+   kitchen marking orders served moves the table to Eating; Paid with no typed
+   total uses what was ordered. No staff typing, so the turn-time estimates
+   keep learning.
+7. **CCTV occupancy.** An on-site camera box posts per-table occupancy counts
+   (never images) with a per-restaurant key the owner issues and can revoke.
+   The host sees "the camera has seen this table empty"; it can close a paid
+   table by itself only if the owner switches that on, and never seats anyone.
+   `scripts/cctv-demo.ts` plays the camera box for demos.
 
 How it all fits together: [`docs/DESIGN.md`](docs/DESIGN.md) (engine,
 algorithm, data model, limits) and [`docs/HOST_SCREEN.md`](docs/HOST_SCREEN.md)
@@ -89,7 +98,7 @@ npm run dev                     # http://localhost:3000
 ## Tests
 
 ```bash
-npm test                        # 57 unit tests: allocation, estimates, policy, room projection
+npm test                        # 62 unit tests: allocation, estimates, policy, room projection
 npm run typecheck && npm run lint
 ```
 
@@ -103,10 +112,10 @@ AUTH_SECRET=$(openssl rand -hex 32) DATABASE_URL=postgresql://postgres@127.0.0.1
 E2E_DATABASE_URL=postgresql://postgres@127.0.0.1:5432/mezbaan_test npm run test:e2e
 ```
 
-The six e2e tests cover: seating a booking, a walk-in and a pushed-together
+The nine e2e tests cover: seating a booking, a walk-in and a pushed-together
 group; closed days, pacing and the 360 px phone layout; dragging a waiting
 family onto a table and playing the night forward; five guests racing for
-one table; a table's full cycle by hand; staff sign-in and role checks.
+one table; a table's full cycle by hand; staff sign-in and role checks; security (401s, cross-site writes refused, CSP); a guest ordering by QR and the floor following; the CCTV feed and its key.
 GitHub Actions runs all of it on every push (`.github/workflows/ci.yml`).
 
 ## Deploy
@@ -139,6 +148,7 @@ Every external library, API and service, as the rules require.
 
 | Package | Version | License | Used for |
 |---|---|---|---|
+| qrcode | 1.5.4 | MIT | Drawing the printable table QR codes |
 | next | 16.4.6 | MIT | Web framework: pages, API routes, server rendering |
 | react, react-dom | 19.2.4 | MIT | UI |
 | @prisma/client, prisma | 6.19.3 | Apache-2.0 | Database client, schema and migrations |

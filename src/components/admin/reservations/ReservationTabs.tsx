@@ -8,6 +8,8 @@ const TABS = [
   { href: "/admin/reservations", label: "Overview" },
   { href: "/admin/reservations/guests", label: "Guests" },
   { href: "/admin/reservations/tables", label: "Tables" },
+  { href: "/admin/reservations/menu", label: "Menu" },
+  { href: "/admin/reservations/qr", label: "QR codes" },
   { href: "/admin/reservations/floor-plan", label: "Floor plan" },
   { href: "/admin/reservations/insights", label: "Insights" },
   { href: "/admin/reservations/settings", label: "Hours & rules" },

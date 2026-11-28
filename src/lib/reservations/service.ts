@@ -3,6 +3,7 @@ import { prisma } from "../db";
 import { bumpRevision } from "../bus";
 import { enqueue } from "../jobs";
 import { logAudit } from "../audit";
+import { sessionTotalCents } from "../ordering";
 import { allocate, onlineCapFor, type AllocTable, type Block } from "./allocate";
 import {
   POLICY_SELECT,
@@ -264,6 +265,16 @@ export async function loadLive(
   ]);
 
   const sessionByTable = new Map(openSessions.map((s) => [s.tableId, s]));
+  const orderRows = openSessions.length
+    ? await prisma.order.findMany({
+        where: { sessionId: { in: openSessions.map((s) => s.id) }, status: { not: "CANCELLED" } },
+        select: { sessionId: true, status: true },
+      })
+    : [];
+  const servedBySession = new Map<string, boolean>();
+  for (const o of orderRows) {
+    servedBySession.set(o.sessionId!, (servedBySession.get(o.sessionId!) ?? true) && o.status === "SERVED");
+  }
   const cleanedByTable = new Map(recentlyCleaned.map((g) => [g.tableId, g._max.cleanedAt]));
   const heldByTable = new Map<string, HeldBy>();
   for (const r of held) {
@@ -298,8 +309,11 @@ export async function loadLive(
           partySize: open.partySize,
           seatedAt: open.seatedAt,
           firstOrderAt,
-          // With no kitchen feed, food is taken as served 20 minutes after ordering.
-          allServed: firstOrderAt != null && nowMs - firstOrderAt.getTime() >= SERVED_AFTER_MS,
+          // Orders marked served on the orders board say so; with none on the
+          // board, food is taken as served 20 minutes after ordering.
+          allServed: servedBySession.has(open.id)
+            ? servedBySession.get(open.id)!
+            : firstOrderAt != null && nowMs - firstOrderAt.getTime() >= SERVED_AFTER_MS,
           billRequestedAt,
           paidAt,
           freeAtOverride: open.freeAtOverride,
@@ -1281,7 +1295,7 @@ export async function tableAction(input: {
         paidAt: session.paidAt ?? now,
         billRequestedAt: session.billRequestedAt ?? now,
         firstOrderAt: session.firstOrderAt ?? now,
-        revenueCents: input.billCents ?? session.revenueCents,
+        revenueCents: input.billCents ?? session.revenueCents ?? ((await sessionTotalCents(session.id)) || null),
       },
     });
   } else if (input.action === "ESTIMATE") {
@@ -1321,7 +1335,13 @@ export async function closeSession(
         leftAt: now,
         leftVia: via,
         cleanedAt: policy.cleaningMins === 0 ? now : null,
+        revenueCents: s.revenueCents ?? ((await sessionTotalCents(s.id)) || null),
       },
+    });
+    // Waiter calls and bill requests from a table that has emptied are moot.
+    await tx.serviceRequest.updateMany({
+      where: { tableId: s.tableId, open: true },
+      data: { open: false, resolvedAt: now },
     });
     if (s.reservationId) {
       const stillSeated = await tx.tableSession.count({
