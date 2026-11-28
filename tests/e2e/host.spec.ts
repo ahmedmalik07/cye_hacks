@@ -443,3 +443,120 @@ test("security: no session means no data, cross-site writes are refused, CSP is 
   expect(csp).toMatch(/script-src 'self' 'nonce-/);
   expect(res.headers()["x-powered-by"]).toBeUndefined();
 });
+
+test("QR ordering: a guest orders, asks for the bill, and the floor follows without staff typing", async ({
+  page,
+  playwright,
+}) => {
+  const { restaurant, tables } = await seedRestaurant(page);
+  const karahi = await db.menuItem.create({
+    data: { restaurantId: restaurant.id, name: "Karahi", priceCents: 250000, category: "Mains" },
+  });
+  const naan = await db.menuItem.create({
+    data: { restaurantId: restaurant.id, name: "Naan", priceCents: 8000, category: "Bread" },
+  });
+  const soldOut = await db.menuItem.create({
+    data: { restaurantId: restaurant.id, name: "Kheer", priceCents: 40000, available: false },
+  });
+  const table = await db.table.findUniqueOrThrow({ where: { id: tables.T2 } });
+  const guest = await playwright.request.newContext({ baseURL: "http://127.0.0.1:3100" });
+  const floorStatus = async () => {
+    const f = await (await page.request.get("/api/staff/floor")).json();
+    return f.tables.find((t: { id: string }) => t.id === tables.T2).status as string;
+  };
+
+  // A wrong code is a plain 404; the right one shows the menu.
+  expect((await guest.get("/api/t/not-a-real-table-code")).status()).toBe(404);
+  const view = await (await guest.get(`/api/t/${table.code}`)).json();
+  expect(view.menu).toHaveLength(3);
+  expect(await floorStatus()).toBe("AVAILABLE");
+
+  // Sold-out and tampered orders are refused; the server prices everything.
+  const bad = await guest.post(`/api/t/${table.code}/orders`, {
+    data: { items: [{ id: soldOut.id, qty: 1 }] },
+  });
+  expect(bad.status()).toBe(400);
+  const ordered = await guest.post(`/api/t/${table.code}/orders`, {
+    data: { items: [{ id: karahi.id, qty: 1 }, { id: naan.id, qty: 4 }], note: "less spicy", price: 1 },
+  });
+  expect(ordered.ok(), await ordered.text()).toBeTruthy();
+  expect((await ordered.json()).totalCents).toBe(250000 + 4 * 8000);
+
+  // Nobody seated the table, yet the floor now shows it occupied.
+  expect(await floorStatus()).toBe("OCCUPIED");
+  const session = await db.tableSession.findFirstOrThrow({ where: { tableId: tables.T2 } });
+  expect(session.source).toBe("QR");
+  expect(session.firstOrderAt).not.toBeNull();
+
+  // The kitchen sees it; marking it served is saved.
+  const board = await (await page.request.get("/api/staff/orders")).json();
+  expect(board.orders).toHaveLength(1);
+  expect(board.orders[0].note).toBe("less spicy");
+  const served = await page.request.patch(`/api/staff/orders/${board.orders[0].id}`, {
+    data: { status: "SERVED" },
+  });
+  expect(served.ok()).toBeTruthy();
+
+  // Asking for the bill turns the tile to Bill and tells the staff.
+  expect((await guest.post(`/api/t/${table.code}/service`, { data: { type: "BILL" } })).ok()).toBeTruthy();
+  expect(await floorStatus()).toBe("BILL");
+  const asks = await (await page.request.get("/api/staff/orders")).json();
+  expect(asks.requests.map((r: { type: string }) => r.type)).toEqual(["BILL"]);
+
+  // Paid without typing a total uses what was ordered; leaving clears the request.
+  expect(
+    (await page.request.post(`/api/staff/floor/tables/${tables.T2}`, { data: { action: "PAID" } })).ok(),
+  ).toBeTruthy();
+  expect(
+    (await page.request.post(`/api/staff/floor/tables/${tables.T2}`, { data: { action: "LEFT" } })).ok(),
+  ).toBeTruthy();
+  const closed = await db.tableSession.findUniqueOrThrow({ where: { id: session.id } });
+  expect(closed.revenueCents).toBe(250000 + 4 * 8000);
+  expect(await db.serviceRequest.count({ where: { tableId: tables.T2, open: true } })).toBe(0);
+
+  // Asking for the bill with nobody seated is refused.
+  expect((await guest.post(`/api/t/${table.code}/service`, { data: { type: "BILL" } })).status()).toBe(409);
+
+  // One restaurant's staff can't touch another's orders.
+  const other = await db.restaurant.create({
+    data: { name: "Other QA", slug: `other-qa-${Date.now().toString(36)}`, timeZone: TZ },
+  });
+  const t2 = await db.table.create({ data: { restaurantId: other.id, name: "X1" } });
+  const o2 = await db.order.create({
+    data: { restaurantId: other.id, tableId: t2.id, totalCents: 100 },
+  });
+  expect(
+    (await page.request.patch(`/api/staff/orders/${o2.id}`, { data: { status: "SERVED" } })).status(),
+  ).toBe(404);
+});
+
+test("CCTV: the camera box reports an empty table, with a key only the owner can issue", async ({
+  page,
+  playwright,
+}) => {
+  const { restaurant, tables } = await seedRestaurant(page);
+  const edge = await playwright.request.newContext({ baseURL: "http://127.0.0.1:3100" });
+  const reading = (key: string, id = restaurant.id) =>
+    edge.post("/api/edge/occupancy", {
+      headers: { authorization: `Bearer ${key}`, "x-restaurant-id": id },
+      data: { readings: [{ table: "T3", occupied: false, people: 0, confidence: 0.93 }] },
+    });
+
+  expect((await reading("dle_nothing")).status()).toBe(404);
+  const issued = await page.request.post("/api/admin/reservations/edge-key");
+  expect(issued.ok()).toBeTruthy();
+  const { key } = await issued.json();
+  expect((await reading("dle_wrong")).status()).toBe(404);
+  const ok = await reading(key);
+  expect(ok.ok(), await ok.text()).toBeTruthy();
+  expect((await ok.json()).updated).toBe(1);
+
+  // The host sees "the camera has seen this table empty".
+  const floor = await (await page.request.get("/api/staff/floor")).json();
+  const t3 = floor.tables.find((t: { id: string }) => t.id === tables.T3);
+  expect(t3.cctv?.empty).toBe(true);
+
+  // Revoking the key stops the feed.
+  expect((await page.request.delete("/api/admin/reservations/edge-key")).ok()).toBeTruthy();
+  expect((await reading(key)).status()).toBe(404);
+});

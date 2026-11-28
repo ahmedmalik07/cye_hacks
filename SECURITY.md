@@ -21,6 +21,7 @@ maintainers directly. Please don't file public issues for vulnerabilities.
 | Input | Every request body is validated with zod, with length and range limits |
 | SQL | Prisma everywhere; the few raw queries are tagged templates (parameterised), never string-built |
 | Abuse limits | Postgres-backed rate limits on login, booking, waiting list, availability, manage links, camera feed; limits survive restarts and span instances |
+| QR ordering | The table code (`/t/{code}`) only lets a guest order for that one table; lookups are rate limited per address and per table; prices are computed server-side from the menu, quantities and counts are bounded, sold-out dishes are refused; staff order and menu routes are scoped by restaurant (tested) |
 | Guest links | Booking and waiting-list links carry a 32-character random token; lookups are rate limited and scoped to the restaurant slug |
 | Machine access | `/api/cron/tick` needs `CRON_SECRET` in production; the camera endpoint needs a per-restaurant key, stored only as a SHA-256 hash and shown once; both answer 404 or 401 without leaking which part was wrong |
 | Double booking | A Postgres exclusion constraint, not application code, so it holds under concurrency and against bugs |

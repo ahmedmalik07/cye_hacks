@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import Link from "next/link";
-import { ArrowLeft, LogOut, Settings2 } from "lucide-react";
+import { ArrowLeft, LogOut, Settings2, UtensilsCrossed } from "lucide-react";
 import { requireStaffPage, ADMIN_ROLES } from "@/lib/auth";
 import { getFloor } from "@/lib/reservations/floor";
 import { bookForDay } from "@/lib/reservations/book";
@@ -51,6 +51,12 @@ export default async function FloorPage({
             <span className="h-2 w-2 animate-pulse rounded-full bg-success-9 motion-reduce:animate-none" />
             Live
           </span>
+          <Link
+            href="/orders"
+            className="flex min-h-9 items-center gap-1.5 rounded-lg px-3 text-xs font-semibold text-gray-12 ring-1 ring-gray-6 hover:bg-gray-3"
+          >
+            <UtensilsCrossed className="size-3.5" /> <span className="hidden sm:inline">Orders</span>
+          </Link>
           {isAdmin && (
             <Link
               href="/admin/reservations"
